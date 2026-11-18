@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+incuva_cred.json
+*.pem
+*.key
+*.dump
+*.dump.gpg
+backups/
+__pycache__/
+*.py[cod]
+.pytest_cache/
