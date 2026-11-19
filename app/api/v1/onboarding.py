@@ -2,13 +2,13 @@ from datetime import date, datetime
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
-from sqlalchemy import desc
 
 from app import db
 from app.governance.access import current_user_access
 from app.models.employee import Employee
 from app.models.onboarding import OnboardingPlan, OnboardingTask
 from app.modules.onboarding.planner import OnboardingPlanner
+from app.services.onboarding_queries import list_onboarding_plans
 
 onboarding_bp = Blueprint("onboarding", __name__)
 _planner = OnboardingPlanner()
@@ -41,12 +41,7 @@ def list_plans():
     org_id, error = _organization_id("view")
     if error:
         return error
-    plans = (
-        OnboardingPlan.query.filter_by(org_id=org_id)
-        .order_by(desc(OnboardingPlan.updated_at), desc(OnboardingPlan.id))
-        .limit(200)
-        .all()
-    )
+    plans = list_onboarding_plans(org_id)
     return jsonify({"plans": [plan.to_dict() for plan in plans]}), 200
 
 

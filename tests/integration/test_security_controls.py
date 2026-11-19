@@ -63,6 +63,80 @@ def test_cross_organization_employee_meeting_and_onboarding_access_is_denied(sec
     assert security_client.get("/v1/meetings", headers=auth_b).get_json()["meetings"] == []
 
 
+def _create_onboarding_task(client, org_id, title="Security test task"):
+    from app import db
+    from app.models.employee import Employee
+    from app.models.onboarding import OnboardingPlan, OnboardingTask
+
+    with client.application.app_context():
+        employee = Employee(org_id=org_id, name=f"Employee {org_id}")
+        db.session.add(employee)
+        db.session.flush()
+        plan = OnboardingPlan(org_id=org_id, employee_id=employee.id, start_date=date.today())
+        task = OnboardingTask(title=title, due_date=date.today(), status="pending")
+        plan.tasks.append(task)
+        db.session.add(plan)
+        db.session.commit()
+        return task.id
+
+
+def _stored_task_status(client, task_id):
+    from app import db
+    from app.models.onboarding import OnboardingTask
+
+    with client.application.app_context():
+        return db.session.get(OnboardingTask, task_id).status
+
+
+def test_onboarding_task_patch_is_isolated_between_organizations(security_client):
+    _user_a, _auth_a = create_org_user(security_client, 881, "onboarding-a@example.test")
+    _user_b, auth_b = create_org_user(security_client, 882, "onboarding-b@example.test")
+    task_id = _create_onboarding_task(security_client, 881)
+
+    response = security_client.patch(
+        f"/v1/onboarding/tasks/{task_id}",
+        headers=auth_b,
+        json={"status": "in_progress"},
+    )
+
+    assert response.status_code == 404
+    assert _stored_task_status(security_client, task_id) == "pending"
+
+
+def test_onboarding_task_patch_requires_manage_permission(security_client):
+    _user_a, auth_viewer = create_org_user(
+        security_client, 883, "onboarding-viewer@example.test", role="analyst",
+    )
+    task_id = _create_onboarding_task(security_client, 883)
+    assert security_client.get("/v1/onboarding/plans", headers=auth_viewer).status_code == 200
+
+    response = security_client.patch(
+        f"/v1/onboarding/tasks/{task_id}",
+        headers=auth_viewer,
+        json={"status": "in_progress"},
+    )
+
+    assert response.status_code == 403
+    assert response.is_json
+    assert response.get_json()["error"] == "permission denied"
+    assert _stored_task_status(security_client, task_id) == "pending"
+
+
+def test_onboarding_task_patch_succeeds_with_manage_permission(security_client):
+    _user_a, auth_a = create_org_user(security_client, 884, "onboarding-manager@example.test")
+    task_id = _create_onboarding_task(security_client, 884)
+
+    response = security_client.patch(
+        f"/v1/onboarding/tasks/{task_id}",
+        headers=auth_a,
+        json={"status": "in_progress"},
+    )
+
+    assert response.status_code == 200
+    assert response.is_json
+    assert _stored_task_status(security_client, task_id) == "in_progress"
+
+
 def test_secret_and_integration_credentials_are_isolated_and_never_returned(security_client):
     from app import db
     from app.models.governance import OrganizationSecret

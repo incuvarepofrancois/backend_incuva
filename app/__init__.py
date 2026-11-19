@@ -104,6 +104,7 @@ def create_app(env="development"):
     from app.api.v1.onboarding import onboarding_bp
     from app.api.v1.integrations import integrations_bp
     from app.api.v1.governance import governance_bp
+    from app.api.v1.agentic_proposals import agentic_proposals_bp
     from app.models.user import User
     from app.models.organization import Organization
     from werkzeug.security import generate_password_hash
@@ -125,6 +126,7 @@ def create_app(env="development"):
     app.register_blueprint(onboarding_bp, url_prefix="/v1")
     app.register_blueprint(integrations_bp, url_prefix="/v1")
     app.register_blueprint(governance_bp, url_prefix="/v1")
+    app.register_blueprint(agentic_proposals_bp, url_prefix="/v1")
 
     @app.cli.command("create-user")
     @click.option("--email", prompt=True)

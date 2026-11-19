@@ -6,6 +6,7 @@ from app.governance.access import current_user_access
 from app.models.employee import Employee
 from app.models.employee_absence import EmployeeAbsence
 from app.models.integration_sync import IntegrationSync
+from app.services.employee_queries import find_employee, list_employee_records
 
 employees_bp = Blueprint("employees", __name__)
 
@@ -37,7 +38,7 @@ def list_employees():
     if error: return error
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 20, type=int), 100)
-    pagination = Employee.query.filter_by(org_id=org_id).paginate(page=page, per_page=per_page, error_out=False)
+    pagination = list_employee_records(org_id, page, per_page)
     return jsonify({
         "employees": [e.to_dict() for e in pagination.items],
         "total": pagination.total,
@@ -50,7 +51,10 @@ def list_employees():
 def get_employee(employee_id):
     org_id, error = _org_access("employees", "view")
     if error: return error
-    employee = Employee.query.filter_by(id=employee_id, org_id=org_id).first_or_404()
+    employee = find_employee(org_id, employee_id)
+    if employee is None:
+        from flask import abort
+        abort(404)
     return jsonify(employee.to_dict()), 200
 
 

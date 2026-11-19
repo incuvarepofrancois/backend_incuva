@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from flask_migrate import check, stamp, upgrade
+from flask_migrate import check, downgrade, stamp, upgrade
 from sqlalchemy import inspect
 from sqlalchemy import text
 
@@ -20,6 +20,12 @@ def test_initial_migration_builds_the_full_schema_from_empty_database():
         check(directory=str(MIGRATIONS_DIR))
         tables = set(inspect(db.engine).get_table_names())
         meeting_columns = {column["name"] for column in inspect(db.engine).get_columns("meetings")}
+        proposal_columns = {
+            column["name"] for column in inspect(db.engine).get_columns("agentic_action_proposals")
+        }
+        proposal_constraints = {
+            constraint["name"] for constraint in inspect(db.engine).get_check_constraints("agentic_action_proposals")
+        }
 
     assert {
         "organizations",
@@ -44,6 +50,15 @@ def test_initial_migration_builds_the_full_schema_from_empty_database():
         "alembic_version",
     }.issubset(tables)
     assert {"action_items", "reviewed_at", "reviewed_by"}.issubset(meeting_columns)
+    assert {
+        "confirmation_token_recovery_ciphertext",
+        "confirmation_token_recovery_nonce",
+        "confirmation_token_recovery_key_id",
+    }.issubset(proposal_columns)
+    assert {
+        "ck_agentic_proposal_recovery_fields_complete",
+        "ck_agentic_proposal_terminal_has_no_recovery_token",
+    }.issubset(proposal_constraints)
 
 
 def test_stamping_a_legacy_schema_preserves_existing_rows():
@@ -68,3 +83,24 @@ def test_stamping_a_legacy_schema_preserves_existing_rows():
         assert stored is not None
         assert stored.name == "Legacy organization"
         assert "organizations" in inspect(db.engine).get_table_names()
+
+
+def test_proposal_recovery_migration_round_trips_on_isolated_sqlite():
+    app = create_app("testing")
+
+    with app.app_context():
+        upgrade(directory=str(MIGRATIONS_DIR), revision="a31e8c4d2f90")
+        upgrade(directory=str(MIGRATIONS_DIR), revision="head")
+        assert "confirmation_token_recovery_ciphertext" in {
+            column["name"] for column in inspect(db.engine).get_columns("agentic_action_proposals")
+        }
+
+        downgrade(directory=str(MIGRATIONS_DIR), revision="a31e8c4d2f90")
+        assert "confirmation_token_recovery_ciphertext" not in {
+            column["name"] for column in inspect(db.engine).get_columns("agentic_action_proposals")
+        }
+
+        upgrade(directory=str(MIGRATIONS_DIR), revision="head")
+        assert "confirmation_token_recovery_ciphertext" in {
+            column["name"] for column in inspect(db.engine).get_columns("agentic_action_proposals")
+        }
