@@ -70,7 +70,7 @@ def create_app(env="development"):
 
     celery.conf.update(broker_url=app.config.get("CELERY_BROKER_URL", ""))
     # Register background integration jobs in both Flask and Celery worker processes.
-    from app.services import bamboohr_tasks, frappehr_tasks  # noqa: F401
+    from app.services import agentic_proposal_tasks, bamboohr_tasks, frappehr_tasks  # noqa: F401
 
     global redis_client
     try:
